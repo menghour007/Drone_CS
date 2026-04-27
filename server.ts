@@ -1,3 +1,5 @@
+import multer from 'multer';
+import session from 'express-session';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -11,36 +13,69 @@ import { KHQR, CURRENCY, COUNTRY, TAG } from 'ts-khqr';
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'transactions.json');
+const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+
+const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+const PRODUCT_UPLOAD_DIR = path.join(UPLOAD_DIR, 'products');
+
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(PRODUCT_UPLOAD_DIR)) fs.mkdirSync(PRODUCT_UPLOAD_DIR, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, PRODUCT_UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${Date.now()}-${crypto.randomUUID()}${ext}`);
+    },
+  }),
+  limits: {
+    files: 10,
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+
+    cb(null, true);
+  },
+});
 
 const BAKONG_BASE_URL = (process.env.BAKONG_BASE_URL || 'https://api-bakong.nbc.gov.kh').trim();
 const BAKONG_TOKEN = (process.env.BAKONG_TOKEN || '').trim();
 const BAKONG_MERCHANT_ID = (process.env.BAKONG_MERCHANT_ID || 'lim_menghour@bkrt').trim();
-const BAKONG_MERCHANT_NAME = (process.env.BAKONG_MERCHANT_NAME || 'MENGHOUR LIM')
-  .replace(/^"|"$/g, '')
-  .trim();
-const BAKONG_MERCHANT_CITY = (process.env.BAKONG_MERCHANT_CITY || 'PHNOM PENH')
-  .replace(/^"|"$/g, '')
-  .trim();
+const BAKONG_MERCHANT_NAME = (process.env.BAKONG_MERCHANT_NAME || 'MENGHOUR LIM').replace(/^"|"$/g, '').trim();
+const BAKONG_MERCHANT_CITY = (process.env.BAKONG_MERCHANT_CITY || 'PHNOM PENH').replace(/^"|"$/g, '').trim();
 const BAKONG_ACCOUNT_ID = (process.env.BAKONG_ACCOUNT_ID || BAKONG_MERCHANT_ID).trim();
 const PAYMENT_TIMEOUT_SECONDS = Number(process.env.PAYMENT_TIMEOUT_SECONDS || 80);
 
-const APP_ICON_URL = (
-  process.env.APP_ICON_URL || 'https://bakong.nbc.gov.kh/images/logo.svg'
-).trim();
+const APP_ICON_URL = (process.env.APP_ICON_URL || 'https://bakong.nbc.gov.kh/images/logo.svg').trim();
 const APP_NAME = (process.env.APP_NAME || 'CS Drone Store').trim();
-const APP_DEEPLINK_CALLBACK = (
-  process.env.APP_DEEPLINK_CALLBACK || 'https://bakong.nbc.gov.kh/'
-).trim();
+const APP_DEEPLINK_CALLBACK = (process.env.APP_DEEPLINK_CALLBACK || 'https://bakong.nbc.gov.kh/').trim();
 
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 
 type TransactionStatus = 'PENDING' | 'COMPLETED' | 'EXPIRED';
+
+type Product = {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice?: number;
+  image: string;
+  images?: string[];
+  description?: string;
+  badge?: string;
+  category?: string;
+  stock?: number;
+  active?: boolean;
+};
 
 type OrderItem = {
   name: string;
@@ -73,13 +108,10 @@ type CustomerPayload = {
   lng?: number | null;
 };
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
 const db = {
   read(): Transaction[] {
     if (!fs.existsSync(DB_FILE)) return [];
+
     try {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
@@ -93,6 +125,60 @@ const db = {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
   },
 };
+
+const productDb = {
+  read(): Product[] {
+    if (!fs.existsSync(PRODUCTS_FILE)) {
+      const seedProducts: Product[] = [
+        {
+          id: crypto.randomUUID(),
+          name: 'DJI Air 3',
+          price: 0.01,
+          image: 'https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=1200&q=80',
+          images: ['https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=1200&q=80'],
+          badge: 'NEW',
+          category: 'Drone',
+          stock: 10,
+          active: true,
+        },
+        {
+          id: crypto.randomUUID(),
+          name: 'FPV Racing Drone',
+          price: 28,
+          image: 'https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1200&q=80',
+          images: ['https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1200&q=80'],
+          badge: 'HOT',
+          category: 'Drone',
+          stock: 8,
+          active: true,
+        },
+      ];
+
+      this.write(seedProducts);
+      return seedProducts;
+    }
+
+    try {
+      const raw = fs.readFileSync(PRODUCTS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  write(data: Product[]) {
+    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  },
+};
+
+function requireAuth(req: any, res: any, next: any) {
+  if (!req.session?.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  next();
+}
 
 function normalizeItems(items: any): OrderItem[] {
   if (!Array.isArray(items)) return [];
@@ -114,10 +200,7 @@ function normalizeItems(items: any): OrderItem[] {
 }
 
 async function generateBakongDeepLink(qrString: string): Promise<string | undefined> {
-  if (!BAKONG_TOKEN) {
-    console.log('[Bakong Deeplink] Missing BAKONG_TOKEN');
-    return undefined;
-  }
+  if (!BAKONG_TOKEN) return undefined;
 
   try {
     const response = await axios.post(
@@ -139,18 +222,13 @@ async function generateBakongDeepLink(qrString: string): Promise<string | undefi
       }
     );
 
-    console.log('[Bakong Deeplink RAW]:', JSON.stringify(response.data, null, 2));
-
     if (response.data?.responseCode === 0 && response.data?.data?.shortLink) {
       return response.data.data.shortLink;
     }
 
     return undefined;
   } catch (error: any) {
-    console.error(
-      '[Bakong Deeplink ERROR]:',
-      error?.response?.data || error?.message || error
-    );
+    console.error('[Bakong Deeplink ERROR]:', error?.response?.data || error?.message || error);
     return undefined;
   }
 }
@@ -164,11 +242,11 @@ async function sendTelegramMessage(payment: Transaction, customer?: CustomerPayl
   const productList =
     payment.items.length > 0
       ? payment.items
-        .map(
-          (item, index) =>
-            `${index + 1}. ${item.name}\n   Qty: ${item.quantity} × $${item.price.toFixed(2)}`
-        )
-        .join('\n\n')
+          .map(
+            (item, index) =>
+              `${index + 1}. ${item.name}\n   Qty: ${item.quantity} x $${item.price.toFixed(2)}`
+          )
+          .join('\n\n')
       : 'No items';
 
   const mapLink =
@@ -178,17 +256,17 @@ async function sendTelegramMessage(payment: Transaction, customer?: CustomerPayl
 
   const customerInfo = customer
     ? [
-      '',
-      'Customer:',
-      `Name: ${customer.name || '-'}`,
-      `Phone: ${customer.phone || '-'}`,
-      `Address: ${customer.province || '-'}`,
-      `Province: ${customer.district || '-'}`,
-      `Note: ${customer.addressNote || '-'}`,
-      `Telegram: ${customer.telegramEnabled ? 'Yes' : 'No'}`,
-      `Payment: ${customer.paymentMethod || '-'}`,
-      mapLink ? `Google Map: ${mapLink}` : 'Google Map: -',
-    ].join('\n')
+        '',
+        'Customer:',
+        `Name: ${customer.name || '-'}`,
+        `Phone: ${customer.phone || '-'}`,
+        `Address: ${customer.province || '-'}`,
+        `Province: ${customer.district || '-'}`,
+        `Note: ${customer.addressNote || '-'}`,
+        `Telegram: ${customer.telegramEnabled ? 'Yes' : 'No'}`,
+        `Payment: ${customer.paymentMethod || '-'}`,
+        mapLink ? `Google Map: ${mapLink}` : 'Google Map: -',
+      ].join('\n')
     : '';
 
   const text = [
@@ -206,31 +284,172 @@ async function sendTelegramMessage(payment: Transaction, customer?: CustomerPayl
     'Payment successful',
   ].join('\n');
 
-  try {
-    const tgRes = await axios.post(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        chat_id: TELEGRAM_CHAT_ID,
-        text,
-      }
-    );
-
-    console.log('[Telegram] Sent successfully:', tgRes.data);
-  } catch (error: any) {
-    console.error('[Telegram] Failed:', error?.response?.data || error?.message || error);
-    throw error;
-  }
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    chat_id: TELEGRAM_CHAT_ID,
+    text,
+  });
 }
 
 async function startServer() {
   const app = express();
 
   app.use(express.json());
+  app.use('/uploads', express.static(UPLOAD_DIR));
+
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || 'secret',
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: false,
+      },
+    })
+  );
+
+  app.post('/api/login', (req, res) => {
+    const username = String(req.body?.username || '').trim();
+    const password = String(req.body?.password || '').trim();
+
+    if (
+      username === process.env.ADMIN_USERNAME &&
+      password === process.env.ADMIN_PASSWORD
+    ) {
+      (req.session as any).user = { username };
+      return res.json({ success: true, user: { username } });
+    }
+
+    return res.status(401).json({ error: 'Invalid username or password' });
+  });
+
+  app.get('/api/me', (req, res) => {
+    const user = (req.session as any).user;
+
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    return res.json({ user });
+  });
+
+  app.post('/api/logout', (req, res) => {
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  app.get('/api/products', (req, res) => {
+    const all = req.query.all === 'true';
+    const products = productDb.read();
+
+    if (all) return res.json(products);
+
+    return res.json(products.filter((product) => product.active !== false));
+  });
+
+  app.post('/api/products', requireAuth, upload.array('images', 10), (req, res) => {
+    const name = String(req.body?.name || '').trim();
+    const price = Number(req.body?.price);
+    const files = (req.files as Express.Multer.File[]) || [];
+    const images = files.map((file) => `/uploads/products/${file.filename}`);
+
+    if (!name) return res.status(400).json({ error: 'Product name is required' });
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ error: 'Valid price is required' });
+    }
+    if (images.length === 0) {
+      return res.status(400).json({ error: 'Please upload at least 1 image' });
+    }
+
+    const products = productDb.read();
+
+    const product: Product = {
+      id: crypto.randomUUID(),
+      name,
+      price,
+      description: req.body?.description || '',
+      originalPrice: req.body?.originalPrice ? Number(req.body.originalPrice) : undefined,
+      image: images[0],
+      images,
+      badge: req.body?.badge || undefined,
+      category: req.body?.category || undefined,
+      stock: Number(req.body?.stock || 0),
+      active: req.body?.active !== 'false',
+    };
+
+    products.push(product);
+    productDb.write(products);
+
+    return res.status(201).json(product);
+  });
+
+  app.put('/api/products/:id', requireAuth, upload.array('images', 10), (req, res) => {
+    const { id } = req.params;
+    const products = productDb.read();
+    const index = products.findIndex((product) => product.id === id);
+
+    if (index === -1) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const name = String(req.body?.name || '').trim();
+    const price = Number(req.body?.price);
+
+    if (!name) return res.status(400).json({ error: 'Product name is required' });
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ error: 'Valid price is required' });
+    }
+
+    const files = (req.files as Express.Multer.File[]) || [];
+    const uploadedImages = files.map((file) => `/uploads/products/${file.filename}`);
+
+    const oldImages =
+      products[index].images && products[index].images.length > 0
+        ? products[index].images
+        : [products[index].image].filter(Boolean);
+
+    const finalImages = uploadedImages.length > 0 ? uploadedImages : oldImages;
+
+    products[index] = {
+      ...products[index],
+      name,
+      price,
+      originalPrice: req.body?.originalPrice ? Number(req.body.originalPrice) : undefined,
+      image: finalImages[0],
+      images: finalImages,
+      badge: req.body?.badge || undefined,
+      category: req.body?.category || undefined,
+      stock: Number(req.body?.stock || 0),
+      description: req.body?.description || undefined,
+      active: req.body?.active !== 'false',
+    };
+
+    productDb.write(products);
+
+    return res.json(products[index]);
+  });
+
+  app.delete('/api/products/:id', requireAuth, (req, res) => {
+    const { id } = req.params;
+    const products = productDb.read();
+    const nextProducts = products.filter((product) => product.id !== id);
+
+    if (nextProducts.length === products.length) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    productDb.write(nextProducts);
+
+    return res.json({ success: true });
+  });
 
   app.get('/api/transactions', (_req, res) => {
     const transactions = db.read().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+
     res.json(transactions);
   });
 
@@ -287,10 +506,7 @@ async function startServer() {
         merchantName: BAKONG_MERCHANT_NAME,
         merchantCity: BAKONG_MERCHANT_CITY || 'PHNOM PENH',
         currency: currencyType === 'KHR' ? CURRENCY.KHR : CURRENCY.USD,
-        amount:
-          currencyType === 'USD'
-            ? Number(rawAmount.toFixed(2))
-            : Math.round(rawAmount),
+        amount: currencyType === 'USD' ? Number(rawAmount.toFixed(2)) : Math.round(rawAmount),
         countryCode: COUNTRY.KH,
         merchantCategoryCode: '5999',
         expirationTimestamp: Date.now() + PAYMENT_TIMEOUT_SECONDS * 1000,
@@ -310,13 +526,11 @@ async function startServer() {
       const deepLink = await generateBakongDeepLink(qrString);
 
       const transactions = db.read();
+
       transactions.push({
         id: paymentId,
         status: 'PENDING',
-        amount:
-          currencyType === 'USD'
-            ? rawAmount.toFixed(2)
-            : Math.round(rawAmount).toString(),
+        amount: currencyType === 'USD' ? rawAmount.toFixed(2) : Math.round(rawAmount).toString(),
         currency: currencyType,
         description,
         createdAt: new Date().toISOString(),
@@ -328,7 +542,6 @@ async function startServer() {
 
       db.write(transactions);
 
-      console.log(`[KHQR] Generated for ${BAKONG_ACCOUNT_ID}: ${paymentId}`);
       return res.json({ qrString, paymentId, deepLink });
     } catch (error) {
       console.error('[API] Error generating KHQR:', error);
@@ -338,25 +551,19 @@ async function startServer() {
 
   app.post('/api/notify-telegram', async (req, res) => {
     try {
-      console.log('[Telegram] /api/notify-telegram body:', req.body);
-
       const { paymentId, customer } = req.body;
       const transactions = db.read();
-      const payment = transactions.find((t) => t.id === paymentId);
+      const payment = transactions.find((transaction) => transaction.id === paymentId);
 
       if (!payment) {
         return res.status(404).json({ error: 'Payment not found' });
       }
 
       await sendTelegramMessage(payment, customer);
-      console.log('[Telegram] Manual trigger sent:', payment.id);
 
       return res.json({ success: true });
     } catch (error: any) {
-      console.error(
-        '[Telegram] Manual trigger error:',
-        error?.response?.data || error?.message || error
-      );
+      console.error('[Telegram] Error:', error?.response?.data || error?.message || error);
       return res.status(500).json({ error: 'Failed to send telegram' });
     }
   });
@@ -365,7 +572,7 @@ async function startServer() {
     try {
       const { paymentId } = req.params;
       const transactions = db.read();
-      const payment = transactions.find((t) => t.id === paymentId);
+      const payment = transactions.find((transaction) => transaction.id === paymentId);
 
       if (!payment) {
         return res.status(404).json({ error: 'Payment not found' });
@@ -375,8 +582,7 @@ async function startServer() {
         return res.json({ status: 'COMPLETED' });
       }
 
-      const elapsedSeconds =
-        (Date.now() - new Date(payment.createdAt).getTime()) / 1000;
+      const elapsedSeconds = (Date.now() - new Date(payment.createdAt).getTime()) / 1000;
 
       if (elapsedSeconds > PAYMENT_TIMEOUT_SECONDS && payment.status === 'PENDING') {
         payment.status = 'EXPIRED';
@@ -385,7 +591,6 @@ async function startServer() {
       }
 
       if (!BAKONG_TOKEN) {
-        console.log('[Bakong] Missing BAKONG_TOKEN, cannot verify payment');
         return res.json({ status: payment.status });
       }
 
@@ -403,7 +608,6 @@ async function startServer() {
         );
 
         const data = response.data;
-        console.log('[Bakong Check Status RAW]:', JSON.stringify(data, null, 2));
 
         if (data?.responseCode === 0 && data?.data) {
           payment.status = 'COMPLETED';
@@ -411,10 +615,7 @@ async function startServer() {
           return res.json({ status: 'COMPLETED' });
         }
       } catch (error: any) {
-        console.error(
-          '[Bakong API] Error checking transaction:',
-          error?.response?.data || error?.message || error
-        );
+        console.error('[Bakong API] Error:', error?.response?.data || error?.message || error);
       }
 
       return res.json({ status: payment.status });
@@ -429,10 +630,13 @@ async function startServer() {
       server: { middlewareMode: true },
       appType: 'spa',
     });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+
     app.use(express.static(distPath));
+
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

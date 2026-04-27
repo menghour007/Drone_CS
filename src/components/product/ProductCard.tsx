@@ -4,6 +4,7 @@ import type { CartItem, Product } from '../../lib/types';
 type Props = {
   product: Product;
   cartItem?: CartItem;
+  onOpen: () => void;
   onAdd: () => void;
   onIncrease: () => void;
   onDecrease: () => void;
@@ -13,6 +14,7 @@ type Props = {
 export default function ProductCard({
   product,
   cartItem,
+  onOpen,
   onAdd,
   onIncrease,
   onDecrease,
@@ -22,7 +24,11 @@ export default function ProductCard({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="relative aspect-[1.05] overflow-hidden bg-slate-100">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative block aspect-[1.05] w-full overflow-hidden bg-slate-100 text-left"
+      >
         <img
           src={product.image}
           alt={product.name}
@@ -34,10 +40,10 @@ export default function ProductCard({
             {product.badge}
           </div>
         )}
-      </div>
+      </button>
 
       <div className="space-y-3 p-3 md:p-4">
-        <div>
+        <button type="button" onClick={onOpen} className="block w-full text-left">
           <div className="text-[16px] font-extrabold leading-none text-slate-800 sm:text-[18px]">
             ${product.price}
 
@@ -51,7 +57,13 @@ export default function ProductCard({
           <div className="mt-2 line-clamp-2 text-[15px] font-bold leading-5 text-slate-600 sm:text-[16px]">
             {product.name}
           </div>
-        </div>
+
+          {product.description && (
+            <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
+              {product.description}
+            </div>
+          )}
+        </button>
 
         {qty > 0 ? (
           <div className="space-y-2">

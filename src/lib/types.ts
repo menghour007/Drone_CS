@@ -4,7 +4,12 @@ export type Product = {
   price: number;
   originalPrice?: number;
   image: string;
+  images?: string[];
+  description?: string;
   badge?: string;
+  category?: string;
+  stock?: number;
+  active?: boolean;
 };
 
 export type CartItem = Product & {

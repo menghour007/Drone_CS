@@ -6,7 +6,7 @@ import type {
     PaymentMethod,
     PaymentStatus,
 } from '../lib/types';
-import { PAYMENT_TIMEOUT_SECONDS } from '../lib/constants';
+import { PAYMENT_TIMEOUT_SECONDS, SHIPPING_FEE } from '../lib/constants';
 
 type Props = {
     cartItems: CartItem[];
@@ -33,7 +33,7 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
     const [customerPhone, setCustomerPhone] = useState('');
     const [district, setDistrict] = useState('');
     const [addressNote, setAddressNote] = useState('');
-    const [telegramEnabled, setTelegramEnabled] = useState(false);
+    const [telegramEnabled, setTelegramEnabled] = useState(true);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ABA_KHQR');
 
     const [addressText, setAddressText] = useState('');
@@ -50,11 +50,35 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
         setShowPaymentSuccess(false);
     }
 
+    function resetCustomerForm() {
+        setCustomerName('');
+        setCustomerPhone('');
+        setDistrict('');
+        setAddressNote('');
+        setTelegramEnabled(true);
+        setPaymentMethod('ABA_KHQR');
+        setAddressText('');
+        setSelectedLat(null);
+        setSelectedLng(null);
+    }
+
     function resetAll() {
         resetPaymentState();
+        resetCustomerForm();
         setReceiptOrder(null);
         setIsCheckoutFormOpen(false);
         setIsPaymentOpen(false);
+        setIsMapOpen(false);
+    }
+
+    function closeCheckoutForm() {
+        setCheckoutError('');
+        setIsCheckoutFormOpen(false);
+    }
+
+    function closePaymentModal() {
+        setIsPaymentOpen(false);
+        resetPaymentState();
     }
 
     function downloadQrImage() {
@@ -66,11 +90,47 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
         link.click();
     }
 
+    function validateCheckoutForm() {
+        const cleanName = customerName.trim();
+        const cleanPhone = customerPhone.replace(/\s/g, '');
+        const cleanAddress = addressText.trim();
+
+        if (cartItems.length === 0) {
+            setCheckoutError('Cart is empty');
+            return false;
+        }
+
+        if (!cleanName) {
+            setCheckoutError('សូមបញ្ចូលឈ្មោះ');
+            return false;
+        }
+
+        if (cleanName.length < 2) {
+            setCheckoutError('ឈ្មោះខ្លីពេក');
+            return false;
+        }
+
+        if (!cleanPhone) {
+            setCheckoutError('សូមបញ្ចូលលេខទូរស័ព្ទ');
+            return false;
+        }
+
+        if (!/^[0-9+]{8,10}$/.test(cleanPhone)) {
+            setCheckoutError('លេខទូរស័ព្ទមិនត្រឹមត្រូវ');
+            return false;
+        }
+
+        if (!cleanAddress) {
+            setCheckoutError('សូមជ្រើសរើសអាសយដ្ឋាន');
+            return false;
+        }
+
+        setCheckoutError('');
+        return true;
+    }
+
     async function submitCheckoutForm() {
-        if (!customerName.trim()) return alert('សូមបញ្ចូលឈ្មោះ');
-        if (!customerPhone.trim()) return alert('សូមបញ្ចូលលេខទូរស័ព្ទ');
-        if (!addressText.trim()) return alert('សូមជ្រើសរើសអាសយដ្ឋាន');
-        if (cartItems.length === 0) return alert('Cart is empty');
+        if (!validateCheckoutForm()) return;
 
         try {
             setLoadingCheckout(true);
@@ -118,6 +178,7 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
         try {
             const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
             const data = await res.json();
+
             setAddressText(data?.address || `${lat}, ${lng}`);
         } catch {
             setAddressText(`${lat}, ${lng}`);
@@ -148,6 +209,14 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
     }, [isPaymentOpen, paymentStatus]);
 
     useEffect(() => {
+        if (!isPaymentOpen) return;
+        if (paymentStatus !== 'PENDING') return;
+        if (secondsLeft > 0) return;
+
+        setPaymentStatus('EXPIRED');
+    }, [secondsLeft, paymentStatus, isPaymentOpen]);
+
+    useEffect(() => {
         if (!checkoutData?.paymentId || !isPaymentOpen || paymentStatus !== 'PENDING') {
             return;
         }
@@ -157,8 +226,6 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
                 const res = await fetch(`/api/check-status/${checkoutData.paymentId}`);
                 const data = await res.json();
 
-                console.log('CHECK STATUS:', data);
-
                 if (data?.status === 'COMPLETED') {
                     setPaymentStatus('COMPLETED');
 
@@ -167,14 +234,14 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
                         0
                     );
 
-                    const shippingFee = cartItems.length > 0 ? 0.1 : 0;
+                    const shippingFee = cartItems.length > 0 ? SHIPPING_FEE : 0;
 
                     const receiptSnapshot = {
                         paymentId: checkoutData.paymentId,
                         date: new Date().toLocaleString(),
                         customer: {
-                            name: customerName,
-                            phone: customerPhone,
+                            name: customerName.trim(),
+                            phone: customerPhone.trim(),
                             address: addressText,
                             district,
                             addressNote,
@@ -199,8 +266,8 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
                         body: JSON.stringify({
                             paymentId: checkoutData.paymentId,
                             customer: {
-                                name: customerName,
-                                phone: customerPhone,
+                                name: customerName.trim(),
+                                phone: customerPhone.trim(),
                                 province: addressText,
                                 district,
                                 addressNote,
@@ -220,7 +287,6 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
                 if (data?.status === 'EXPIRED') {
                     setPaymentStatus('EXPIRED');
                     clearInterval(interval);
-                    return;
                 }
             } catch (error) {
                 console.error('Status check failed:', error);
@@ -288,5 +354,7 @@ export function useCheckout({ cartItems, grandTotal, clearCart }: Props) {
         downloadQrImage,
         resetPaymentState,
         resetAll,
+        closeCheckoutForm,
+        closePaymentModal,
     };
 }

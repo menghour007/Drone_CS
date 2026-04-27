@@ -9,9 +9,12 @@ import MapPickerModal from '../components/map/MapPickerModal';
 
 import { useCart } from '../hooks/useCart';
 import { useCheckout } from '../hooks/useCheckout';
+import { useProducts } from '../hooks/useProducts';
 
 export default function Home() {
   const cart = useCart();
+  const products = useProducts();
+
   const checkout = useCheckout({
     cartItems: cart.cartItems,
     grandTotal: cart.grandTotal,
@@ -37,12 +40,6 @@ export default function Home() {
               <p className="mt-4 max-w-xl text-xl leading-relaxed text-slate-600 sm:text-2xl">
                 Leading the way in aerial photography and performance.
               </p>
-
-              <div className="mt-7 flex flex-wrap gap-5 text-sm font-medium text-slate-600 sm:text-base">
-                <div>✦ 4K UHD Camera</div>
-                <div>✦ Extended Flight Time</div>
-                <div>✦ Advanced Navigation</div>
-              </div>
             </div>
 
             <div className="relative flex items-center justify-center">
@@ -57,16 +54,25 @@ export default function Home() {
         </section>
 
         <main className="mx-auto w-full max-w-7xl">
-          <div className="mb-4">
-            <h2 className="text-2xl font-black text-slate-800">
-              Featured Products
-            </h2>
-            <p className="text-sm text-slate-500">
-              Top drone gear for creators and pilots
-            </p>
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-black text-slate-800">
+                Featured Products
+              </h2>
+              <p className="text-sm text-slate-500">
+                Top drone gear for creators and pilots
+              </p>
+            </div>
+
           </div>
 
-          <ProductGrid cart={cart} />
+          <ProductGrid
+              cart={cart}
+              products={products.products}
+              loading={products.loadingProducts}
+              error={products.productError}
+              onCheckout={() => checkout.setIsCheckoutFormOpen(true)}
+            />
         </main>
 
         <Footer />
@@ -77,15 +83,9 @@ export default function Home() {
           onCheckout={() => checkout.setIsCheckoutFormOpen(true)}
         />
 
-        <CheckoutModal cart={cart} checkout={checkout} />
-
+        <CheckoutModal checkout={checkout} />
         <MapPickerModal checkout={checkout} />
-
-        <PaymentModal
-          cart={cart}
-          checkout={checkout}
-        />
-
+        <PaymentModal cart={cart} checkout={checkout} />
         <PaymentSuccessModal checkout={checkout} cart={cart} />
       </div>
     </div>

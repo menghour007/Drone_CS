@@ -1,7 +1,29 @@
 @import "tailwindcss";
+
 @font-face {
-  font-family: 'Khmer OS Battambang';
-  src: url('./lib/fonts/KhmerOS_battambang.ttf') format('truetype');
-  font-weight: normal;
+  font-family: 'KhmerOS';
+  src: url('/src/lib/fonts/KhmerOS_battambang.ttf') format('truetype');
+  font-weight: 400;
   font-style: normal;
+  font-display: swap;
+}
+
+html,
+body,
+#root {
+  font-family: 'KhmerOS', system-ui, Arial, sans-serif;
+}
+.input {
+  height: 48px;
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgb(203 213 225);
+  padding: 0 16px;
+  font-size: 14px;
+  outline: none;
+  background: white;
+}
+
+.input:focus {
+  border-color: rgb(15 23 42);
 }

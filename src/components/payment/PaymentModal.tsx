@@ -1,9 +1,11 @@
-import { Clock3, Download, X } from 'lucide-react';
+import { Clock3, Download, RefreshCcw, X } from 'lucide-react';
 import { MERCHANT_NAME } from '../../lib/constants';
 import { openBakongDeepLink } from '../../lib/utils';
 
 export default function PaymentModal({ checkout, cart }: any) {
     if (!checkout.isPaymentOpen) return null;
+
+    const isExpired = checkout.paymentStatus === 'EXPIRED';
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-3 backdrop-blur-sm sm:p-4 lg:p-8">
@@ -16,10 +18,7 @@ export default function PaymentModal({ checkout, cart }: any) {
                         </div>
 
                         <button
-                            onClick={() => {
-                                checkout.setIsPaymentOpen(false);
-                                checkout.resetPaymentState();
-                            }}
+                            onClick={checkout.closePaymentModal}
                             className="rounded-full p-2 hover:bg-slate-100"
                         >
                             <X className="h-5 w-5" />
@@ -44,16 +43,25 @@ export default function PaymentModal({ checkout, cart }: any) {
 
                                 <div className="my-3 border-t-2 border-dashed border-slate-300" />
 
-                                <div className="bg-white">
+                                <div className="relative bg-white">
                                     {checkout.qrImage ? (
                                         <img
                                             src={checkout.qrImage}
                                             alt="KHQR"
-                                            className="mx-auto aspect-square w-full max-w-[280px] object-contain"
+                                            className={`mx-auto aspect-square w-full max-w-[280px] object-contain ${isExpired ? 'opacity-25 grayscale' : ''
+                                                }`}
                                         />
                                     ) : (
                                         <div className="flex h-[280px] items-center justify-center text-slate-500">
                                             Loading QR...
+                                        </div>
+                                    )}
+
+                                    {isExpired && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="rounded-2xl bg-red-600 px-5 py-3 text-center font-black text-white shadow-xl">
+                                                EXPIRED
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -61,36 +69,54 @@ export default function PaymentModal({ checkout, cart }: any) {
                         </div>
 
                         <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-center text-sm text-slate-600 shadow-sm">
-                            Please scroll down check your order before payment. សូមរើសមើលការបញ្ជាទិញរបស់អ្នកមុនពេលបង់ប្រាក់។
+                            Please check your order before payment.
                         </div>
 
                         <div className="mt-2 flex items-center justify-between rounded-2xl bg-white px-3 py-2 shadow-sm">
                             <div className="text-sm text-slate-500">ពេលនៅសល់</div>
 
-                            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                            <div
+                                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold ${isExpired
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}
+                            >
                                 <Clock3 className="h-4 w-4 text-amber-500" />
-                                {checkout.secondsLeft}s
+                                {isExpired ? 'Expired' : `${checkout.secondsLeft}s`}
                             </div>
                         </div>
 
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {isExpired ? (
                             <button
-                                onClick={() => openBakongDeepLink(checkout.checkoutData?.deepLink)}
-                                disabled={!checkout.checkoutData?.deepLink}
-                                className="flex h-12 w-full items-center justify-center rounded-2xl bg-blue-600 font-semibold text-white disabled:opacity-50"
+                                onClick={() => {
+                                    checkout.closePaymentModal();
+                                    checkout.setIsCheckoutFormOpen(true);
+                                }}
+                                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 font-semibold text-white"
                             >
-                                Open Bakong App
+                                <RefreshCcw className="h-5 w-5" />
+                                Generate New KHQR
                             </button>
+                        ) : (
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <button
+                                    onClick={() => openBakongDeepLink(checkout.checkoutData?.deepLink)}
+                                    disabled={!checkout.checkoutData?.deepLink}
+                                    className="flex h-12 w-full items-center justify-center rounded-2xl bg-blue-600 font-semibold text-white disabled:opacity-50"
+                                >
+                                    Open Bakong App
+                                </button>
 
-                            <button
-                                onClick={checkout.downloadQrImage}
-                                disabled={!checkout.qrImage}
-                                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#111827] font-semibold text-white disabled:opacity-50"
-                            >
-                                <Download className="h-5 w-5" />
-                                Download QR
-                            </button>
-                        </div>
+                                <button
+                                    onClick={checkout.downloadQrImage}
+                                    disabled={!checkout.qrImage}
+                                    className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#111827] font-semibold text-white disabled:opacity-50"
+                                >
+                                    <Download className="h-5 w-5" />
+                                    Download QR
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -102,10 +128,7 @@ export default function PaymentModal({ checkout, cart }: any) {
                         </div>
 
                         <button
-                            onClick={() => {
-                                checkout.setIsPaymentOpen(false);
-                                checkout.resetPaymentState();
-                            }}
+                            onClick={checkout.closePaymentModal}
                             className="rounded-full p-2 hover:bg-slate-100"
                         >
                             <X className="h-6 w-6" />
@@ -115,28 +138,13 @@ export default function PaymentModal({ checkout, cart }: any) {
                     <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
                         <div className="space-y-3">
                             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                                <div>
-                                    <strong>ឈ្មោះ:</strong> {checkout.customerName || '-'}
-                                </div>
-                                <div>
-                                    <strong>លេខទូរស័ព្ទ:</strong> {checkout.customerPhone || '-'}
-                                </div>
-                                <div>
-                                    <strong>អាសយដ្ឋាន:</strong> {checkout.addressText || '-'}
-                                </div>
-                                <div>
-                                    <strong>ខេត្ត:</strong> {checkout.district || '-'}
-                                </div>
-                                <div>
-                                    <strong>សម្គាល់:</strong> {checkout.addressNote || '-'}
-                                </div>
-                                <div>
-                                    <strong>Telegram:</strong>{' '}
-                                    {checkout.telegramEnabled ? 'Yes' : 'No'}
-                                </div>
-                                <div>
-                                    <strong>Payment:</strong> {checkout.paymentMethod}
-                                </div>
+                                <div><strong>ឈ្មោះ:</strong> {checkout.customerName || '-'}</div>
+                                <div><strong>លេខទូរស័ព្ទ:</strong> {checkout.customerPhone || '-'}</div>
+                                <div><strong>អាសយដ្ឋាន:</strong> {checkout.addressText || '-'}</div>
+                                <div><strong>ខេត្ត:</strong> {checkout.district || '-'}</div>
+                                <div><strong>សម្គាល់:</strong> {checkout.addressNote || '-'}</div>
+                                <div><strong>Telegram:</strong> {checkout.telegramEnabled ? 'Yes' : 'No'}</div>
+                                <div><strong>Payment:</strong> {checkout.paymentMethod}</div>
                             </div>
 
                             {cart.cartItems.map((item: any) => (
@@ -148,7 +156,6 @@ export default function PaymentModal({ checkout, cart }: any) {
                                         <div className="truncate font-semibold text-slate-800">
                                             {item.name}
                                         </div>
-
                                         <div className="text-sm text-slate-500">
                                             {item.quantity} × ${item.price.toFixed(2)}
                                         </div>
@@ -176,6 +183,12 @@ export default function PaymentModal({ checkout, cart }: any) {
                                     <span>${cart.grandTotal.toFixed(2)}</span>
                                 </div>
                             </div>
+
+                            {isExpired && (
+                                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                                    This KHQR expired. Please generate a new payment QR.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
