@@ -75,17 +75,15 @@ export default function PaymentModal({ checkout, cart }: any) {
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             <button
-                                onClick={() => {
-                                    const link = checkout.checkoutData?.deepLink;
-                                    alert(link || 'NO DEEPLINK');
-                                    console.log('DeepLink:', link);
-                                    openBakongDeepLink(link);
-                                }}
-                                disabled={!checkout.checkoutData?.deepLink}
-                                className="flex h-12 w-full items-center justify-center rounded-2xl bg-blue-600 font-semibold text-white disabled:opacity-50"
-                            >
-                                Open Bakong App
-                            </button>
+  onClick={() => {
+    const link = checkout.checkoutData?.deepLink;
+    alert(link || 'NO DEEPLINK');
+    console.log('checkoutData:', checkout.checkoutData);
+  }}
+  className="flex h-12 w-full items-center justify-center rounded-2xl bg-blue-600 font-semibold text-white"
+>
+  Open Bakong App
+</button>
 
                             <button
                                 onClick={checkout.downloadQrImage}
