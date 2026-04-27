@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@font-face {
+  font-family: 'Khmer OS Battambang';
+  src: url('./lib/fonts/KhmerOS_battambang.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
